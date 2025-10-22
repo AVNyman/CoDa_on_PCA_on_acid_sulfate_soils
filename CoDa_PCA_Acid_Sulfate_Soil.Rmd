@@ -1,0 +1,488 @@
+---
+title: "CoDa_PCA_Acid_Sulfate_Soil"
+author: "Alex"
+date: "2025-10-22"
+output: html_document
+---
+
+```{r library1}
+library(ggplot2)
+library(tidyr)
+library(dplyr)
+library(compositions)
+library(readxl) #Import excel datafile
+library(tibble)
+
+library(vegan)
+library(gridExtra)#Needed for Martyn's code
+library(RColorBrewer) #Same as above
+
+library(factoextra) #fancy PCA visualiations (e.g. the circles around hte points)
+
+
+```
+
+
+```{r Import data}
+
+Alex_Soils <- read_excel("Alex_22Soils.xlsx")
+Alex_Soils_LOI <- read_excel("LOI_22Sites.xlsx")
+
+```
+
+```{r Data cleaning}
+
+colnames(Alex_Soils)[1] <- "Site_NEW" 
+colnames(Alex_Soils)[2] <- "Triplicate"
+colnames(Alex_Soils)[3] <- "Site"
+colnames(Alex_Soils)[4] <- "Area" 
+colnames(Alex_Soils)[5] <- "Zone"
+colnames(Alex_Soils_LOI)[1] <- "Site"
+Alex_Soils_LOI[,3] <- sapply(Alex_Soils_LOI[,3], as.character)
+Alex_Soils_LOI
+
+#INCLUDE LOI
+Alex_Soils <- left_join(Alex_Soils, Alex_Soils_LOI, by = c("Site", "Triplicate", "Zone"))
+Alex_Soils
+
+#If you include LOI, you lose a few sites. Martyn did not include LOI, therefore, he didn't lose the sites, and therefore there may be decimal-point differences in PCA's depending on which method you used.
+
+Soil22 <- na.omit(Alex_Soils[-c(1:2), -3])
+
+#Including LOI
+Soil22[,5:46] <- sapply(Soil22[,5:46], as.numeric)
+colnames(Soil22)[1:4] <- c("Site", "Triplicate","Area", "Zone")
+colnames(Soil22)[46] <- "LOI"
+Soil22 <- Soil22[,c(1:4, 46, 5:45)]
+Soil22
+
+#Only the chemical elements (composition)
+Soil22_elements <- Soil22[,-c(1:5)]
+
+#Only environmental var
+env_var <- Soil22[,1:5]
+
+#Transform with CLR and Log (The ILR transformation is build into the CoDaPCA package from robcomposisitons further down)
+Soil22_clr <- clr(Soil22_elements)
+Soil22_log <- log(Soil22_elements)
+
+
+```
+
+
+#PCA
+
+```{r PCA VEGAN - IND/SITES ONLY}
+
+PCA_CLR_SOIL22 <- prcomp(Soil22_clr, scale = FALSE)
+
+tiff("PCA - CLR 22SOILS_New_names_Location_color.tiff", compression = "lzw")
+fviz_pca_ind(PCA_CLR_SOIL22,
+                habillage = Soil22$Site,
+                title = "",
+                geom.ind = "ind")+
+  geom_point(aes(shape = Soil22$Site, colour = Soil22$Site), size = 3)+
+  scale_shape_manual(name = "Sites", 
+                     labels = c("(n = 3)", "(n = 6)", "(n = 9)", "(n = 9)", "(n = 3)", "(n = 9)", "(n = 9)", "(n = 9)", "(n = 8)", "(n = 7)", "(n = 9)", "(n = 9)", "(n = 9)", "(n = 9)", "(n = 9)", "(n = 8)", "(n = 5)", "(n = 8)", "(n = 9)", "(n = 9)", "(n = 9)", "(n = 6)"), 
+                     values = c("A" = "A", "B" = "B", "C" = "C", "D" = "D", "E" = "E", "F" = "F", "G" = "G", "H" = "H", "I" = "I", "J" = "J", "K" ="K", "L"="L", "M" ="M", "N" = "N", "O"="O", "P"="P", "R" ="R", "S" ="S", "T" ="T", "U" = "U", "V"="V", "X" ="X"))+
+  scale_color_manual(name = "Sites",
+                     labels = c("(n = 3)", "(n = 6)", "(n = 9)", "(n = 9)", "(n = 3)", "(n = 9)", "(n = 9)", "(n = 9)", "(n = 8)", "(n = 7)", "(n = 9)", "(n = 9)", "(n = 9)", "(n = 9)", "(n = 9)", "(n = 8)", "(n = 5)", "(n = 8)", "(n = 9)", "(n = 9)", "(n = 9)", "(n = 6)"), 
+                     values = c("#700000", "#a30000","#bc1a04","#d73408", "#f66810", "#ee4e0c", "#f88213", "#fdb61b", "#ffd01f", "#9330c7", "#000035", "#001864","#002f8e", "#0046bb", "#0075d4", "#008cd4", "#00a3d3", "#5dcded", "#00d1d3", "#00e8d2", "#00ffd2", "#1cf9ff"))+
+  xlab("PC1 (47.6%)")+
+  ylab("PC2 (15.8%)")
+#  theme(legend.position = "none")
+dev.off()
+
+# c("A", "B", "C", "D", "E", "F", "G", "H", "I", "J", "K", "L", "M", "N", "O", "P", "R", "S", "T", "U", "V", "X")
+
+ # theme(legend.position = "none") 
+#  scale_color_manual(name = "Zones", labels = c("OZ", "TZ","RZ"), values = c("red", "green", "blue"))
+#  scale_shape_manual(rep(Sites$Sites, nrow(Soil22_clr)))
+
+png("PCA - CLR 22SOILS_New_names_Zone_color.png", width = 20, height = 20, units = "cm", res =72)
+fviz_pca_ind(PCA_CLR_SOIL22,
+                habillage = Soil22$Site,
+                geom.ind = "ind",
+                title = "PCA - 22 Soils, CLR transformed")+
+  geom_point(aes(shape = Soil22$Site, colour = Soil22$Zone), size = 3)+
+  scale_shape_manual(name = "Site", labels = c("A", "B", "C", "D", "E", "F", "G", "H", "I", "J", "K", "L", "M", "N", "O", "P", "R", "S", "T", "U", "V", "X"), values = c("A" = "A", "B" = "B", "C" = "C", "D" = "D", "E" = "E", "F" = "F", "G" = "G", "H" = "H", "I" = "I", "J" = "J", "K" ="K", "L"="L", "M" ="M", "N" = "N", "O"="O", "P"="P", "R" ="R", "S" ="S", "T" ="T", "U" = "U", "V"="V", "X" ="X"))+
+  scale_color_manual(values = c("red", "green", "blue"))#+
+#  theme(legend.position = "none")
+dev.off()
+
+
+
+
+#play Fviz
+png("PCA - CLR 22SOILS_North_South.png", width = 20, height = 20, units = "cm", res =72)
+fviz_pca_ind(PCA_CLR_SOIL22,
+                habillage = Soil22$Triplicate,
+                geom.ind = "point",
+             #   addEllipses = "TRUE",
+                title = "PCA - 22 Soils, CLR transformed")
+dev.off()
+
+```
+
+```{r PCA VEGAN - BIPLOT multielemental vectors inlcuded}
+
+PCA_CLR_SOIL22 <- prcomp(Soil22_clr, scale = FALSE)
+
+tiff("PCA BIPLOT - CLR 22SOILS_New_names_zone_color.tiff", compression = "lzw")
+fviz_pca_biplot(PCA_CLR_SOIL22,
+                habillage = Soil22$Zone,
+                #select.var = list(contrib = 12),
+                col.var = "black",
+                geom.ind = "point",
+                labelsize = 4,
+                #addEllipses = "TRUE",
+                title = "")+
+  geom_point(aes(shape = Soil22$Site, colour = Soil22$Zone), size = 2)+
+  xlab("PC1 (47.6%)")+
+  ylab("PC2 (15.8%)")+
+  scale_color_manual(name = "Zones", labels = c("OZ", "TZ", "RZ"), values = c("red", "green", "blue"))+
+  scale_shape_manual(guide = "none", name = "", labels = c("", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", ""), values = c("A" = "A", "B" = "B", "C" = "C", "D" = "D", "E" = "E", "F" = "F", "G" = "G", "H" = "H", "I" = "I", "J" = "J", "K" ="K", "L"="L", "M" ="M", "N" = "N", "O"="O", "P"="P", "R" ="R", "S" ="S", "T" ="T", "U" = "U", "V"="V", "X" ="X"))
+dev.off()
+
+```
+
+```{r PCA VEGAN Log-transformed}
+
+#Log transformed
+Log_PCA_Soil22 <- prcomp(Soil22_log, scale = FALSE)
+
+png("PCA - LOG 22SOILS_New_names_Location_color.png", width = 20, height = 20, units = "cm", res =72)
+fviz_pca_ind(Log_PCA_Soil22,
+                habillage = Soil22$Site,
+                geom.ind = "ind",
+               # addEllipses = "TRUE",
+                title = "PCA - 22 Soils, LOG transformed")+
+  geom_point(aes(shape = Soil22$Site, colour = Soil22$Site), size = 3)+
+  scale_shape_manual(name = "Site", labels = c("A", "B", "C", "D", "E", "F", "G", "H", "I", "J", "K", "L", "M", "N", "O", "P", "R", "S", "T", "U", "V", "X"), values = c("A" = "A", "B" = "B", "C" = "C", "D" = "D", "E" = "E", "F" = "F", "G" = "G", "H" = "H", "I" = "I", "J" = "J", "K" ="K", "L"="L", "M" ="M", "N" = "N", "O"="O", "P"="P", "R" ="R", "S" ="S", "T" ="T", "U" = "U", "V"="V", "X" ="X"))+
+  scale_color_manual(labels = c("A", "B", "C", "D", "E", "F", "G", "H", "I", "J", "K", "L", "M", "N", "O", "P", "R", "S", "T", "U", "V", "X"), values = c("#700000", "#a30000","#bc1a04","#d73408", "#f66810", "#ee4e0c", "#f88213", "#fdb61b", "#ffd01f", "#9330c7", "#000035", "#001864","#002f8e", "#0046bb", "#0075d4", "#008cd4", "#00a3d3", "#5dcded", "#00d1d3", "#00e8d2", "#00ffd2", "#1cf9ff"))#+
+#  theme(legend.position = "none")
+dev.off()
+
+
+png("PCA BIPLOT - LOG 22SOILS_zones.png", width = 20, height = 20, units = "cm", res =72)
+fviz_pca_biplot(Log_PCA_Soil22,
+                habillage = Soil22$Zone,
+                geom.ind = "ind",
+                col.var = "black",
+                title = "PCA - 22 Soils, LOG transformed")+
+  geom_point(aes(shape = Soil22$Site, colour = Soil22$Zone), size = 3)+
+  scale_shape_manual(name = "Site", labels = c("A", "B", "C", "D", "E", "F", "G", "H", "I", "J", "K", "L", "M", "N", "O", "P", "R", "S", "T", "U", "V", "X"), values = c("A" = "A", "B" = "B", "C" = "C", "D" = "D", "E" = "E", "F" = "F", "G" = "G", "H" = "H", "I" = "I", "J" = "J", "K" ="K", "L"="L", "M" ="M", "N" = "N", "O"="O", "P"="P", "R" ="R", "S" ="S", "T" ="T", "U" = "U", "V"="V", "X" ="X"))+
+  scale_color_manual(values = c("red", "green", "blue"))#+
+#  theme(legend.position = "none")
+dev.off()
+
+
+```
+
+
+```{r Barplot of loadings}
+
+#PCA_CLR_SOIL22
+variance <- (PCA_CLR_SOIL22$sdev)^2
+loadings <- PCA_CLR_SOIL22$rotation
+rownames(loadings) <- colnames(Soil22_elements)
+scores <- PCA_CLR_SOIL22$x
+varPercent <- variance/sum(variance)*100
+
+png("Soil22_OTHER_PC's_barplot.png", width = 20, height = 15, units = "cm", res =72)
+barplot(varPercent, xlab = 'PC', ylab = 'percent Variance', names.arg = 1:length(varPercent), las=1, col='gray')+
+abline(h=1/ncol(PCA_CLR_SOIL22)*100, col='red')
+dev.off()
+varPercent
+
+round(loadings, 2)[,1:3]
+
+biplot(scores[, 1:3], loadings[,1:3], cex = 0.7)
+
+```
+
+```{r loadings barplot - chemical element realtionships}
+
+PCA_CLR_SOIL22 <- prcomp(Soil22_clr, scale = FALSE)
+
+#Visualize the affinity for the principal componenet 1 and what each elements relationship is to PC1
+
+#PCA_CLR_SOIL22
+barplot(PCA_CLR_SOIL22$rotation[,1], main = "PC1 Loadings plot", las = 2)
+
+#More
+par(mar=c(8,3,2,1))
+barplot <- barplot(PCA_CLR_SOIL22$rotation[,1], main = "PC1 Loadings plot for elements", col = ifelse(PCA_CLR_SOIL22$rotation[,1] > 0, yes = "green", no="red"), cex.names = 0.4)
+
+#List of loadings
+
+sort(PCA_CLR_SOIL22$rotation[,2], decreasing = TRUE)
+PCA_CLR_SOIL22$rotation[,2]
+
+#If eigenvalue is >1, then it's one of the important PC's, if it's <1, then it's probably not important.
+eigen <- PCA_CLR_SOIL22$sdev^2
+eigen
+
+loadings <- PCA_CLR_SOIL22$rotation
+loadings <- signif(loadings[,1:2], digits = 2)
+loadings <- data.frame(loadings)
+loadings
+PC1 <- loadings[order(loadings$PC1),]
+PC2 <- loadings[order(loadings$PC2),]
+
+write.csv(PC1, file = "PC1.csv")
+write.csv(PC2, file = "PC2.csv")
+
+```
+
+# RDA
+
+```{r RDA}
+
+#Based on rda_clr_loi_zone_MARTYN.r
+
+#variables: 
+#env_var
+#M_CLR
+#M_soils = merged_data, kinda
+
+#FULLL ANOVA
+# Full model with both predictors
+rda_full <- rda(Soil22_clr ~ LOI + Zone, data = env_var)
+print(summary(rda_full))
+# Individual models for comparison
+rda_loi_only <- rda(Soil22_clr ~ LOI, data = env_var)
+rda_zone_only <- rda(Soil22_clr ~ Zone, data = env_var)
+
+
+#STATISTICAL TESTS
+#THE OVERALL MODEL VARIANCE,  and F_VALUE (Table 1 in manuscript)
+set.seed(123)
+anova_full <- anova(rda_full, permutations = 999)
+print(anova_full)
+round(anova_full$`Pr(>F)`[1], 4) #Overall model p-value
+
+
+# Test each predictor individually (marginal effects)
+set.seed(123)
+anova_marginal <- anova(rda_full, by = "margin", permutations = 999)
+print(anova_marginal)
+round(anova_marginal$`Pr(>F)`[1], 4) #LOI marginal effect p-value
+round(anova_marginal$`Pr(>F)`[2], 4) #Zone marginal effect p-value
+
+# Test each predictor sequentially (conditional effects)
+#THE VARIANCE AND F_VALUE for the Individual factors (in TABLE 1 in manuscript)
+set.seed(123)
+anova_terms <- anova(rda_full, by = "terms", permutations = 999)
+print(anova_terms)
+
+# Test RDA axes
+#Not sure what this accomplishes...
+set.seed(123)
+anova_axes <- anova(rda_full, by = "axis", permutations = 999)
+print(anova_axes)
+
+
+#VARIANCE PARTITIONING
+# Partition variance between LOI and Zone (THE Percent from Table 1? Maybe?)
+varpart_result <- varpart(Soil22_clr, 
+                         env_var[, "LOI", drop = FALSE],
+                         env_var[, "Zone", drop = FALSE])
+print(varpart_result)
+# Plot variance partitioning
+plot(varpart_result, digits = 2, 
+     Xnames = c("LOI", "Zone"),
+     bg = c("red", "blue"))
+title("Variance Partitioning: LOI vs Zone")
+
+round(varpart_result$part$indfract$Adj.R.squared[1] * 100, 2) #Pure LOI effect
+round(varpart_result$part$indfract$Adj.R.squared[2] * 100, 2) #Pure Zone effect
+round(varpart_result$part$indfract$Adj.R.squared[3] * 100, 2) #Shared LOI-Zone effect
+
+
+#VARIANCE EXPLAINED 
+# Extract variance components
+Soil22
+total_var <- sum(rda_full$CA$eig) + sum(rda_full$CCA$eig) #tHE SUM of all hte PC eig's (eigenvalues?) + the sum of the RDA eig's. 
+constrained_var <- sum(rda_full$CCA$eig) #tEH SUM OF ONLY THE RDA EIGS's
+rda1_var <- rda_full$CCA$eig[1] #This is RDA1
+rda2_var <- rda_full$CCA$eig[2] #This is just RDA2
+
+# Calculate percentages
+total_explained <- (constrained_var / total_var) * 100 #Percentage of RDA vs. RDA+PCA sum. I.e. the total variance explained by LOI + ZONE
+rda1_explained <- (rda1_var / total_var) * 100 #Percentage of RDA1 relative to RDA+PCA sum I.e. variance explained by RDA1
+rda2_explained <- (rda2_var / total_var) * 100 #Percentage of RDA2 relative to RDA+PCA sum I.e. variance explained by RDA2
+
+# Individual model comparisons
+loi_only_var <- (sum(rda_loi_only$CCA$eig) / sum(rda_loi_only$CA$eig + rda_loi_only$CCA$eig)) * 100 #LOI ALONE EXPLAINS THIS
+zone_only_var <- (sum(rda_zone_only$CCA$eig) / sum(rda_zone_only$CA$eig + rda_zone_only$CCA$eig)) * 100 #ZONE ALONE EXPLAINS THIS
+
+# Adjusted R-squared
+cat("Adjusted R-squared (full model):", round(RsquareAdj(rda_full)$adj.r.squared, 4), "\n")
+
+#FOR UNDERSTANDING THIS, LOOK AT: primarily https://www.davidzeleny.net/anadat-r/doku.php/en:rda_cca_examples OR also helpful: https://uw.pressbooks.pub/appliedmultivariatestatistics/chapter/rda-and-dbrda/
+
+
+#INTERACTION BETWEEN LOI AND ZONE
+rda_interaction <- rda(Soil22_clr ~ LOI * Zone, data = env_var)
+set.seed(123)
+anova_interaction <- anova(rda_interaction, rda_full, permutations = 999)
+#Interaction test (comparing LOI*Zone vs LOI+Zone)
+print(anova_interaction)
+
+if(anova_interaction$`Pr(>F)`[2] < 0.05) {
+  cat("✓ LOI × Zone interaction is SIGNIFICANT\n")
+} else {
+  cat("✗ LOI × Zone interaction is NOT significant\n")
+}
+
+
+#VIZUALIZATIONS
+#Plot with the 10 most common items
+
+# Get scores 
+#OBS! THE FUNCTION "SCORES()" CONFICTS WITH some other package, so make sure to keep the minimum amount of packages loaded for this part to work.
+site_scores <- scores(rda_full, display = "sites", choices = 1:2)
+species_scores <- scores(rda_full, display = "species", choices = 1:2)
+biplot_scores <- scores(rda_full, display = "bp", choices = 1:2)
+
+# Create data frame for sites
+site_df <- data.frame(
+  ID = Soil22$Site,
+  RDA1 = site_scores[, 1],
+  RDA2 = site_scores[, 2],
+  LOI = env_var$LOI,
+  Zone = env_var$Zone
+)
+
+# Create data frame for species
+species_df <- data.frame(
+  Element = gsub("clr_", "", rownames(species_scores)),
+  RDA1 = species_scores[, 1],
+  RDA2 = species_scores[, 2],
+  RDA1_abs = abs(species_scores[, 1]),
+  RDA2_abs = abs(species_scores[, 2])
+)
+
+# Sort by RDA1 importance
+species_df <- species_df[order(species_df$RDA1_abs, decreasing = TRUE), ]
+
+cat("Top 10 elements most strongly associated with RDA1:\n")
+print(species_df[1:10, c("Element", "RDA1", "RDA2")])
+
+top_ten <-species_df[1:10, c("Element")]
+top_ten
+
+biplot_scores <- scores(rda_full, display = "bp", choices = 1:2)
+biplot_scores[1,1]
+
+#png("PCA BIPLOT - CLR 22SOILS_New_names_zone_color.png", width = 20, height = 20, units = "cm", res =72)
+tiff("PCA BIPLOT - TOP 10 CLR 22SOILS_New_names_zone_color.tiff", compression = "lzw")
+fviz_pca_biplot(PCA_CLR_SOIL22,
+                habillage = Soil22$Zone,
+                select.var = list(contrib = 12),
+                col.var = "black",
+                geom.ind = "point",
+                labelsize = 4,
+                #addEllipses = "TRUE",
+                title = "")+
+  geom_point(aes(shape =Soil22$Site, colour = Soil22$Zone), size = 2)+
+  xlab("PC1 (47.6%)")+
+  ylab("PC2 (15.8%)")+
+  scale_color_manual(name = "Zones", labels = c("OZ", "TZ", "RZ"), values = c("red", "green", "blue"))+
+  scale_shape_manual(guide = "none", name = "", labels = c("", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", ""), values = c("A" = "A", "B" = "B", "C" = "C", "D" = "D", "E" = "E", "F" = "F", "G" = "G", "H" = "H", "I" = "I", "J" = "J", "K" ="K", "L"="L", "M" ="M", "N" = "N", "O"="O", "P"="P", "R" ="R", "S" ="S", "T" ="T", "U" = "U", "V"="V", "X" ="X"))+
+  geom_segment(aes(x=0, y=0, xend = -biplot_scores[1,1]*2, yend = -biplot_scores[1,2]*2),
+               arrow = arrow(length = unit(0.3, "cm")),
+               color = "darkred", size = 0.5)+
+  geom_text(aes(x = -biplot_scores[1,1]*2.2, y = -biplot_scores[1,2]*2.2, label = "LOI"),
+            color = "darkred", size = 4)+
+  geom_text(aes(x = -biplot_scores[1,1]*2.2, y = -biplot_scores[1,2]*4, label = "(R^2 = 0.87)"),
+            color = "darkred", size = 4)
+dev.off()
+
+
+#KEY RESULTS
+rda_full #Full RDA model (LOI + Zone)
+rda_loi_only #LOI-only model
+rda_zone_only #Zone-only model
+varpart_result #Variance partitioning results
+site_df #Site scores with environmental data
+species_df #Element loadings ranked by importance
+anova_marginal #Marginal effects test results
+
+
+
+```
+
+
+#Compare with RobComp ILR PCA
+
+```{r library2}
+
+
+library(ggfortify) #This helps color the biplots
+library(ggforce)
+library(stats)
+
+library(psych) #Factor analysis
+library(grDevices) #For color palette
+
+#Specifically for Compositions NOTE: this package conflicts with certain other functions, such as corrplot ^
+library(robCompositions)
+#detach("package:robCompositions", unload = TRUE)
+library(corrplot)
+
+
+```
+
+```{r PCA RobCom CorCoDa}
+
+#THe Robcomp ILR to CLR PCA
+PCA_ILR <- pcaCoDa(as.matrix(Soil22_elements), method = "robust")
+
+#VIsualize it as is
+biplot(PCA_ILR)
+
+#Using PCA_ILR$princompOutputClr you can input it into fviz just as you could a "normally" created pca using prcomp
+
+png("PCA - ILR 22SOILS_New_names_Location_color.png", width = 20, height = 20, units = "cm", res =72)
+fviz_pca_ind(PCA_ILR$princompOutputClr,
+                habillage = Soil22$Site,
+                geom.ind = "ind",
+               # addEllipses = "TRUE",
+                title = "PCA - 22 Soils, ILR transformed")+
+  geom_point(aes(shape = Soil22$Site, colour = Soil22$Site), size = 3)+
+  scale_shape_manual(name = "Site", labels = c("A", "B", "C", "D", "E", "F", "G", "H", "I", "J", "K", "L", "M", "N", "O", "P", "R", "S", "T", "U", "V", "X"), values = c("A" = "A", "B" = "B", "C" = "C", "D" = "D", "E" = "E", "F" = "F", "G" = "G", "H" = "H", "I" = "I", "J" = "J", "K" ="K", "L"="L", "M" ="M", "N" = "N", "O"="O", "P"="P", "R" ="R", "S" ="S", "T" ="T", "U" = "U", "V"="V", "X" ="X"))+
+  scale_color_manual(labels = c("A", "B", "C", "D", "E", "F", "G", "H", "I", "J", "K", "L", "M", "N", "O", "P", "R", "S", "T", "U", "V", "X"), values = c("#700000", "#a30000","#bc1a04","#d73408", "#f66810", "#ee4e0c", "#f88213", "#fdb61b", "#ffd01f", "#9330c7", "#000035", "#001864","#002f8e", "#0046bb", "#0075d4", "#008cd4", "#00a3d3", "#5dcded", "#00d1d3", "#00e8d2", "#00ffd2", "#1cf9ff"))#+
+#  theme(legend.position = "none")
+dev.off()
+
+
+#PCA with color on zones
+png("PCA BIPLOT - ILR 22SOILS Zone color.png", width = 20, height = 20, units = "cm", res =72)
+fviz_pca_biplot(PCA_ILR$princompOutputClr,
+                habillage = Soil22$Zone,
+                geom.ind = "point",
+                col.var = "black",
+                labelsize = 4,
+                #addEllipses = "TRUE",
+                title = "PCA - 22 Soils, ILR transformed")
+dev.off()
+
+```
+
+# LOI to SITE
+
+```{r Loi vs site}
+
+ggplot(env_var, aes(x = Site, y=LOI, color = Zone))+
+  geom_boxplot()+
+  scale_color_manual(values = c("red", "green", "blue"), labels = c("OZ", "TZ", "RZ"))+
+  ylab("LOI (%)")
+
+ggsave("LOI_VS_SITE.png", height = 13, width = 18, units = "cm")
+  
+
+
+```
+
